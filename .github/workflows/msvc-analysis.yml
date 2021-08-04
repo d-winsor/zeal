@@ -1,0 +1,71 @@
+name: "MSVC Code Analysis Scanning"
+
+on:
+  push:
+    branches: [master, stable]
+  pull_request:
+    # The branches below must be a subset of the branches above.
+    branches: [master]
+  schedule:
+  - cron: '0 8 * * 6'
+
+jobs:
+  analyze-msvc:
+    name: Analyze
+    runs-on: windows-2019
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Prepare vcpkg
+      uses: lukka/run-vcpkg@v6
+      id: runvcpkg
+      with:
+        vcpkgArguments: libarchive[core] openssl sqlite3
+        vcpkgDirectory: ${{ runner.workspace }}/vcpkg/
+        vcpkgGitCommitId: 0bf3923f9fab4001c00f0f429682a0853b5749e0
+        vcpkgTriplet: x64-windows
+
+    - name: Cache Qt
+      id: cache-qt
+      uses: actions/cache@v2
+      with:
+        path: ${{ runner.workspace }}/Qt/
+        key: ${{ runner.os }}-qt-5.15.0
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v2
+      with:
+        arch: win64_msvc2019_64
+        modules: qtwebengine
+        cached: ${{ steps.cache-qt.outputs.cache-hit }}
+        extra: --external 7z
+        version: 5.15.0
+
+    - name: Print Environment
+      run: gci env:* | sort-object name | format-list
+
+    - name: Initialize MSVC Code Analysis
+      uses: microsoft/msvc-code-analysis-action@beta
+      with:
+        results: ${{ runner.workspace }}/build
+        ruleset: MinimumRecommendedRules.ruleset
+
+    - name: Configure & Build
+      uses: lukka/run-cmake@v3
+      with:
+        buildDirectory: ${{ runner.workspace }}/build/
+        cmakeAppendedArgs: >-
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DZEAL_PORTABLE_BUILD=OFF
+        cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
+        useVcpkgToolchainFile: true
+
+    - name: Upload SARIF files
+      uses: github/codeql-action/upload-sarif@v1
+      with:
+        sarif_file: ${{ runner.workspace }}/build
