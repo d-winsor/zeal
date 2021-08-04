@@ -45,6 +45,9 @@ jobs:
         extra: --external 7z
         version: 5.15.0
 
+    - name: Print Environment
+      run: gci env:* | sort-object name | format-list
+
     - name: Initialize MSVC Code Analysis
       uses: microsoft/msvc-code-analysis-action@beta
       with:
